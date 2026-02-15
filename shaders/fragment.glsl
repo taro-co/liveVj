@@ -1,180 +1,260 @@
 precision highp float;
 
-uniform float time;
-uniform vec2 resolution;
+uniform float uHue; // 色相制御用
+uniform float uMode;        // 表示モード切替（0,1,2...）
+uniform float uSpin;        // 回転量スケール
+uniform float uHueSpeed;    // 色相回転スピード
 
-uniform float uParticleUI;
-uniform float uParticleSize;
-uniform float uParticleBrightness;
-uniform float uParticleBandHeight;
-uniform float uParticleVerticalBias;
-uniform float uParticleFlicker; //0.0 = 無 / 1.0 = 強い
-uniform float uParticleFlowSpeed;
-uniform float uMasterBrightness;
-
-/**粒子サンプリング
-*/
-//擬似乱数
-float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-}
-
-float particles(vec2 uv) {
-
-    // 粒子密度を UI で制御
-    float density = mix(20.0, 300.0, uParticleUI);
-
-    vec2 gv = fract(uv * density) - 0.5;
-    vec2 id = floor(uv * density);
-
-    float rnd = hash(id);
-
-    // 粒子サイズ（UI）
-    float size = mix(0.05, 0.35, uParticleSize);
-
-    float d = length(gv);
-
-    // ランダムに間引く
-    float mask = step(0.6, rnd);
-
-    float core = smoothstep(size, size - 0.02, d);
-    return mask * core * uParticleBrightness;
-}
-
-//縦線
-float verticalLine(vec2 uv) {
-    float sum = 0.0;
-
-    float speed = 0.35;
-    float t = fract(time * speed);
-    float head = 1.0 - t;
-    float fade = smoothstep(1.0, 0.0, t);
-
-    float widthPx = 3.0;
-    float width = widthPx / resolution.x;
-
-    // 出現タイミングの seed
-    float baseSeed = floor(time * 0.35);
-
-    // 本数（3〜5）
-    float countF = mix(3.0, 5.0, hash(vec2(baseSeed, 9.1)));
-    int count = int(countF);
-
-    // 最大5本まで描画
-    for (int i = 0; i < 5; i++) {
-        if (i >= count) break;
-
-        float seed = baseSeed + float(i) * 13.7;
-
-        // 線ごとの時間オフセット
-        float offset = hash(vec2(seed, 7.7));
-        float localTime = fract(time * speed + offset);
-
-        float head = 1.0 - localTime;
-        float fade = smoothstep(1.0, 0.0, localTime);
-
-        // フェード後半を少し暗く
-        float dim = mix(1.0, 0.65, smoothstep(0.6, 1.0, localTime));
-        fade *= dim;
-
-        // 線のX位置(0.0〜1.0)
-        float lineX = hash(vec2(seed, 0.0));
-
-        // 太さを 1〜4px ランダム
-        float widthPx = mix(1.0, 3.0, hash(vec2(seed, 3.3)));
-        float width = widthPx / resolution.x;
-        float line = smoothstep(width, 0.0, abs(uv.x - lineX));
-
-        float mask = step(uv.y, head);
-        sum += line * mask;
-    }
-
-    return sum * fade;
-}
-
-//ノイズ
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-
-    float a = hash(i);
-    float b = hash(i + vec2(1.0, 0.0));
-    float c = hash(i + vec2(0.0, 1.0));
-    float d = hash(i + vec2(1.0, 1.0));
-
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+//HSV変換関数
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
 void main() {
-    //座標
+    // 正規化座標
     vec2 uv = gl_FragCoord.xy / resolution.xy;
-    
-    //aspect比補正
+
+    // アスペクト補正
     uv -= 0.5;
     uv.x *= resolution.x / resolution.y;
     uv += 0.5;
 
-    /** 粒子密度
-    */
-    //高解像度グリッド
-    vec2 gridUV = uv * 300.0;
-
-    float t = time * mix(0.0, 0.5, uParticleFlowSpeed);
-
-    //密度場
-    float field =
-        noise(gridUV * 0.6 + vec2(0.0, time * 0.15)) * 0.6 +
-        noise(gridUV * 1.2 - vec2(0.0, time * 0.1)) * 0.4;
-    
-    // 縦方向バイアス（-1.0:下 / 0.0:中央 / +1.0:上）
-    float biasY = mix(0.5, 0.5 + uParticleVerticalBias * 0.4, 1.0);
-
-    // エネルギー帯（UI制御）
+    // 円の中心（画面中央）
     vec2 center = vec2(0.5);
-    // ピクセル単位の距離
-    float distPx = length((uv - center) * resolution);
-    // 半径（px）: 150〜300px を UI で制御
-    float radius = mix(300.0, 400.0, uParticleBandHeight);
-    // エネルギー減衰（ガウス）
-    float band = exp(-pow(distPx / radius, 8.0));
-    field *= band;
 
-    //粒子化(閾値処理)
-    float particle = step(0.88, field);
+    //光の方向性
+    vec3 lightDir = normalize(vec3(0.3, 0.6, 1.0));
 
-    // 粒子ID（グリッド基準）
-    vec2 pid = floor(gridUV);
+    /**field回転角
+     * 今は固定の時間で回し、後でnanoctrlで制御できるようにする
+     */
+    float spin = time * uSpin;
+    //傾き(0.3~0.8の間で調整)
+    float tilt = 0.55;
 
-    // 粒子ごとの位相
-    float flickerPhase = hash(pid);
+    // フィールド用UV（ここで空間ごと回す）
+    vec2 fieldUV = pseudo3DRotate(uv, center, spin, tilt);
 
-    // 時間変化（ランダムに点滅）
-    float flicker =
-        mix(
-            1.0,
-            smoothstep(
-                0.2,
-                1.0,
-                sin(time * 6.0 + flickerPhase * 6.2831)
-        ),
-        uParticleFlicker
-    );
+    //円球化
+    vec3 sphere = sphereProject(fieldUV);
+    sphere = rotateX(sphere, time * uSpin);//X軸回転
+    vec2 dUV = sphere.xy * 0.5 + 0.5;
 
-    // 縦線
-    float vLine = verticalLine(uv);
+    //中心からのベクトル
+    vec2 dir = dUV - center;
+    // 半径による色変化（意味付け）
+    float r = length(dir);
 
-    //kemuri
-    float smokeLayer = 0.0;
-    if (uSmoke > 0.5) {
-        smokeLayer = smoke(uv, time) * 0.25;
+    //半径方向の正規化ベクトル
+    vec2 radialDir = normalize(dir);
+    //接線方向 90°回転
+    vec2 tangentialDir = vec2(-radialDir.y, radialDir.x);
+
+    //流れの強さ
+    float flowStrength = mix(0.04, 0.14, noise(dUV * 4.0 + time * 0.3));
+    //流れベクトルの合成
+    vec2 flow = tangentialDir;
+
+    //回転寄り / 放射寄りの比率
+    //float swirl = 1.0; //1.0=回転
+    //float burst = 0.0; //1.0=放射
+
+    // --- 乱流ノイズ ---
+    float n = noise(dUV * 6.0 + time * 0.4);
+    // ノイズで角度を少し回す
+    float noiseAngle = (n - 0.5) * 0.25;
+    flow = rotate2D(noiseAngle) * flow;
+
+    // 中心からの角度（-PI ~ PI）
+    float angle = atan(dUV.y - center.y, dUV.x - center.x);
+    angle += spin; //主回転
+
+    /**
+     * 粒子
+     */
+    // 現在・少し過去・さらに過去
+    float t0 = time;
+    float t1 = time - 0.15;
+    float t2 = time - 0.3;
+    // 流れに沿った履歴UV
+    vec2 fieldUV0 = dUV + flow * flowStrength * t0;
+    vec2 fieldUV1 = dUV + flow * flowStrength * t1;
+    vec2 fieldUV2 = dUV + flow * flowStrength * t2;
+    // 粒子を時間差で取得
+    float p0 = particles(fieldUV0);
+    float p1 = particles(fieldUV1);
+    float p2 = particles(fieldUV2);
+    // 時間差を強調して「軌跡」にする
+    float particleBase = p0 * 0.4 + p1 * 0.4 + p2 * 0.2;
+
+    /**
+     * 円球スライス合成
+     * -- (前提)-- 球 = 円(zSlice)の組み合わせが直径を変えて球になる --
+     * z=0(枚数) -> 球の断面,
+     * z=-1.0~+1.0(枚数) -> サンプリング-> 球
+     */
+    //初期値
+    const int SLICE_COUNT = 9;
+    float sphereField = 0.0;
+    float angularAccum = 0.0;
+    float baseRadius = 0.25;
+    float thickness = 0.02;
+
+    for (int i = 0; i < SLICE_COUNT; i++) {
+        // -1.0 ~ +1.0
+        float z = mix(-1.0, 1.0, float(i) / float(SLICE_COUNT - 1));
+
+        //手前を明るくする
+        float depth = 1.0 - abs(z);
+        depth = pow(depth, 1.5); //コントラスト
+
+        //球 断面の半径
+        float sliceRadius = baseRadius * sqrt(max(0.0, 1.0 - z * z));
+        //疑似法線 z=法線
+        float normalZ = sqrt(max(0.0, 1.0 - z * z));
+
+        //Z毎に奥行きを出す
+        vec2 sliceUV = dUV;
+        sliceUV.y *= mix(1.0, 0.6, abs(z));
+
+        //z毎に回転位相をずらす
+        float rotFactor = mix(0.2, 1.0, depth);
+        float sliceAngularWave = 
+            0.5 + 0.5 * sin(angle * 289.0 - time * 1.2 * rotFactor);
+
+        // リングfield
+        float ring = circleRingField(
+            sliceUV,
+            center,
+            sliceRadius,
+            thickness
+        );
+
+        //光の当たり方
+        float lambert = clamp(normalZ * lightDir.z, 0.0, 1.0);
+
+        //z毎の位相ずらし　合成
+        sphereField += ring * depth * lambert;
+        angularAccum += ring * sliceAngularWave;
     }
 
-    // 合成（粒子 + 縦線）
-    float col = particle * 0.9 + vLine;
-    //明度調整
-    col *= uMasterBrightness;
+    //angle * X の X を変えると波の密度が変わる
+    float angularWave = angularAccum / float(SLICE_COUNT);
 
-    gl_FragColor = vec4(vec3(clamp(col, 0.0, 1.0)), 1.0);
+    /**
+     * marker, energy
+     */
+    //円周のマーカーを回転かくに追従させる
+    float markerAngle = spin;
+    float angleDiff = abs(angle - markerAngle);
+    //角度さをwrap(-PI~PI)
+    angleDiff = min(angleDiff,6.2831853 - angleDiff);
+
+    //マーカー幅(細め)
+    float marker = smoothstep(0.15, 0.0, angleDiff);
+    //リング上のみに制限
+    marker *= sphereField;
+
+    //半径で粒子を間引く(星座感)
+    float particle = particleBase * sphereField;
+    particle *= step(0.2, fract(r * 12.0 + n));
+
+    //field effected
+    float fieldInfluence = sphereField * angularWave;
+    //particle field
+    float particleField = particle * fieldInfluence;
+    particleField *= smoothstep(0.0, 0.25, sphereField);
+
+    // 半径方向の密度
+    float radial = smoothstep(0.15, 0.35, r);
+
+    // 回転が見えるように乗算
+    float energy = particle;
+    energy *= angularWave;
+    energy += marker * 1.5;
+    energy *= smoothstep(0.0, 0.25, sphereField);
+
+
+    //色加算用
+    float finalIntensity = pow(particleField, 0.5);
+
+    //発光用 intensity分離
+    float glowCore = pow(finalIntensity, 1.8);//芯
+    float glowSoft = pow(finalIntensity, 0.7);//滲み
+    float glow = glowCore * 1.4 + glowSoft * 0.6;
+
+    //α用フェード(半径ベース) 内側:1.0, 外側:0.0に自然消滅
+    float alphaRadial = smoothstep(0.45, 0.15, r);
+    float alphaParticle = smoothstep(0.0, 0.6, finalIntensity);
+
+    
+
+
+    vec3 baseColor = vec3(0.6, 0.7, 1.0); // 薄い青
+
+    vec3 colored = baseColor * finalIntensity;
+
+    // 内側：白 / 外側：青
+    vec3 innerColor = vec3(1.0);
+    vec3 outerColor = vec3(0.4, 0.6, 1.0);
+
+    vec3 radiusColor = mix(innerColor, outerColor, smoothstep(0.15, 0.35, r));
+
+    colored = radiusColor * finalIntensity;
+    //角度による色相変化
+    float angleNorm = (angle + 3.1415926) / (2.0 * 3.1415926);
+
+    // angle : -PI〜PI → 0〜1
+    float angleHue = (angle + 3.1415926) / (2.0 * 3.1415926);
+
+    // noise : 0〜1
+    float noiseHue = noise(dUV * 4.0 + time * 0.2);
+
+    // flow : 強さだけ使う（方向は無視）
+    float flowHue = length(flow) * 2.0;
+
+    // 色相オフセット（全部足すが弱く）
+    float hueOffset =
+          angleHue * 0.15
+        + noiseHue * 0.10
+        + flowHue  * 0.10;
+
+    // 最終色相（wrap）
+    float finalHue = fract(uHue + hueOffset + time * uHueSpeed);
+
+    // HSV → RGB
+    vec3 hueColor = hsv2rgb(vec3(finalHue, 0.6, finalIntensity));
+
+    // 既存色に「色相だけ」上書き
+    colored = mix(colored, hueColor, 0.6);
+        //色相を uniform で制御
+        float hue = fract(uHue);        // 0.0〜1.0
+        float sat = 0.6;
+        float val = finalIntensity;
+
+    vec3 hsvColor = hsv2rgb(vec3(hue, sat, val));
+
+    // 既存色と軽くブレンド
+    colored = mix(colored, hsvColor, 0.5);
+
+    // --- 表示モード切替 ---
+    if (uMode < 0.5) { // Mode 0 : 通常（今見えている完成形）
+        /* 何もしない */
+    } else if (uMode < 1.5) { // Mode 1 : モノクロ（輝度だけ）
+        colored = vec3(finalIntensity);
+    }
+    else { // Mode 2 : 外周強調（VJ用）
+        colored *= pow(sphereField, 0.4) * 1.5;
+    }
+
+    float front = smoothstep(0.0, 0.15, sphere.z);
+    float alpha = alphaRadial * alphaParticle;
+    alpha *= front;
+    vec3 finalOut = colored * glow + marker * vec3(1.0);
+    colored += sphereField * particle;
+
+    gl_FragColor = vec4(finalOut, alpha);
 
 }

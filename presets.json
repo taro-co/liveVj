@@ -1,0 +1,62 @@
+{
+  "presets": [
+    {
+      "id": 1,
+      "name": "静かな球体",
+      "description": "デフォルト設定",
+      "particles": {
+        "count": 100000,
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.9,
+        "rotationX": 0.001,
+        "rotationY": 0.002,
+        "noiseStrength": 0.2,
+        "colorCycleSpeed": 1.0
+      },
+      "effects": {
+        "setA": false,
+        "setB": false,
+        "bloom": { "strength": 0.8 },
+        "trail": { "strength": 0.0 },
+        "warp": { "strength": 0.0 },
+        "glitch": { "strength": 0.0 },
+        "aberration": { "strength": 0.0 }
+      },
+      "layers": {
+        "layer1": true,
+        "layer2": false,
+        "layer3": false
+      }
+    },
+    {
+      "id": 2,
+      "name": "激しい崩壊",
+      "description": "高エネルギー設定",
+      "particles": {
+        "count": 300000,
+        "hue": 0.6,
+        "saturation": 0.8,
+        "lightness": 0.5,
+        "rotationX": 0.005,
+        "rotationY": -0.003,
+        "noiseStrength": 0.8,
+        "colorCycleSpeed": 2.0
+      },
+      "effects": {
+        "setA": true,
+        "setB": false,
+        "bloom": { "strength": 1.5 },
+        "trail": { "strength": 0.7 },
+        "warp": { "strength": 0.2 },
+        "glitch": { "strength": 0.0 },
+        "aberration": { "strength": 0.0 }
+      },
+      "layers": {
+        "layer1": true,
+        "layer2": false,
+        "layer3": false
+      }
+    }
+  ]
+}
