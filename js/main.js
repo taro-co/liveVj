@@ -7,8 +7,7 @@ import { FPSMonitor, MemoryMonitor, QualityManager } from './utils/perfMonitor.j
 import { PARTICLE_CONFIG, STAR_COLORS, CONSTELLATION_CONFIG } from './config/params.js';
 import { ColorCycle } from './utils/colorCycle.js';
 import { paramStore, INITIAL_STATE } from './state/paramStore.js';
-import { MIDIHandler } from './input/midiHandler.js';
-import { KeyboardFallback } from './input/keyboardFallback.js';
+import { KeyboardHandler } from './input/keyboardHandler.js';
 import { DebugUI } from './ui/debugUI.js';
 import { EffectSystem } from './effects/effectSystem.js';
 import { LayerManager } from './layers/layerManager.js';
@@ -44,17 +43,13 @@ async function main() {
   setupResize(renderer, camera, effectSystem);
 
   const debugUI = new DebugUI();
-  const midiHandler = new MIDIHandler(paramStore, effectState, resetToInitialState, presetLoader, layerManager);
-  const keyboardFallback = new KeyboardFallback(paramStore, effectState, resetToInitialState, debugUI, presetLoader);
-
-  midiHandler.init().then((connected) => {
-    if (!connected) {
-      console.log('Using keyboard fallback controls:');
-      console.log('Q/A: Particle count | W/S: Saturation | E/D: Lightness | R/F: Hue');
-      console.log('1/2/3: Effects | Cmd+1/2/3: Save preset | Shift+1/2/3: Load preset');
-      console.log('Cmd+R: Reset | H: Toggle Debug UI');
-    }
-  });
+  window.debugUI = debugUI; // グローバルに登録（キーボード制御から参照可能に）
+  const keyboardHandler = new KeyboardHandler(
+    paramStore,
+    effectState,
+    layerManager,
+    presetLoader
+  );
 
   const fpsMonitor = new FPSMonitor();
   const memoryMonitor = new MemoryMonitor();
@@ -69,7 +64,7 @@ async function main() {
     const deltaTime = clock.getDelta();
     const elapsedTime = clock.getElapsedTime();
 
-    if (!midiHandler.connected) keyboardFallback.update();
+    keyboardHandler.update();
     paramStore.updateAll(deltaTime);
     const values = paramStore.getValues();
 
@@ -88,7 +83,6 @@ async function main() {
 
     debugUI.update(paramStore, {
       ...effectState,
-      midiConnected: midiHandler.connected,
     });
 
     particleSphere.update(elapsedTime, deltaTime);
