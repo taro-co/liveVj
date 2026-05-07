@@ -12,11 +12,12 @@ export class KeyboardHandler {
    * @param {import('../layers/layerManager.js').LayerManager} layerManager
    * @param {import('../presets/presetLoader.js').PresetLoader} presetLoader
    */
-  constructor(paramStore, effectState, layerManager, presetLoader) {
+  constructor(paramStore, effectState, layerManager, presetLoader, patternManager = null) {
     this.paramStore = paramStore;
     this.effectState = effectState;
     this.layerManager = layerManager;
     this.presetLoader = presetLoader;
+    this.patternManager = patternManager;
 
     // キー状態管理
     this.keyState = Object.create(null);
@@ -260,6 +261,28 @@ export class KeyboardHandler {
     }
   }
 
+  _hasAnyPatternActive() {
+    if (!this.patternManager || !this.patternManager.patterns) return false;
+    const tracked = ['constellation', 'microbe', 'water'];
+    return tracked.some((name) => {
+      const pattern = this.patternManager.patterns[name];
+      if (!pattern) return false;
+      if (typeof pattern.enabled === 'boolean') return pattern.enabled;
+      if (typeof pattern.visible === 'boolean') return pattern.visible;
+      if (pattern.group && typeof pattern.group.visible === 'boolean') return pattern.group.visible;
+      return false;
+    });
+  }
+
+  _updateParticleCountForPatternToggle() {
+    if (!this.paramStore || !this.paramStore.particleCount) return;
+    if (this._hasAnyPatternActive()) {
+      this.paramStore.particleCount.setValue(100);
+    } else {
+      this.paramStore.particleCount.setValue(10000);
+    }
+  }
+
   /**
    * トグル系キーの処理（keydown で1回のみ実行）
    */
@@ -278,26 +301,30 @@ export class KeyboardHandler {
       return;
     }
     if (key === '3' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-      this.effectState.setA = false;
-      this.effectState.setB = false;
-      console.log('All effects OFF');
+      if (this.patternManager) {
+        this.patternManager.toggle('constellation');
+        this._updateParticleCountForPatternToggle();
+      }
       return;
     }
-
-    // ===== レイヤー制御 =====
     if (key === '4' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-      this.layerManager.toggleLayer(0);
-      console.log(`Layer 1: ${this.layerManager.layers[0]?.enabled ? 'ON' : 'OFF'}`);
+      if (this.patternManager) {
+        this.patternManager.toggle('photoFog');
+      }
       return;
     }
     if (key === '5' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-      this.layerManager.toggleLayer(1);
-      console.log(`Layer 2: ${this.layerManager.layers[1]?.enabled ? 'ON' : 'OFF'}`);
+      if (this.patternManager) {
+        this.patternManager.toggle('microbe');
+        this._updateParticleCountForPatternToggle();
+      }
       return;
     }
     if (key === '6' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-      this.layerManager.toggleLayer(2);
-      console.log(`Layer 3: ${this.layerManager.layers[2]?.enabled ? 'ON' : 'OFF'}`);
+      if (this.patternManager) {
+        this.patternManager.toggle('water');
+        this._updateParticleCountForPatternToggle();
+      }
       return;
     }
 

@@ -12,6 +12,7 @@ import { DebugUI } from './ui/debugUI.js';
 import { EffectSystem } from './effects/effectSystem.js';
 import { LayerManager } from './layers/layerManager.js';
 import { PresetLoader } from './presets/presetLoader.js';
+import { PatternManager } from './patterns/patternManager.js';
 
 async function main() {
   if (!checkWebGLSupport()) return;
@@ -39,6 +40,7 @@ async function main() {
   const layerManager = new LayerManager(scene, particleSphere);
   const presetLoader = new PresetLoader(paramStore, effectState, layerManager);
   await presetLoader.init();
+  const patternManager = new PatternManager(scene, camera, renderer);
 
   setupResize(renderer, camera, effectSystem);
 
@@ -48,7 +50,8 @@ async function main() {
     paramStore,
     effectState,
     layerManager,
-    presetLoader
+    presetLoader,
+    patternManager
   );
 
   const fpsMonitor = new FPSMonitor();
@@ -75,6 +78,7 @@ async function main() {
     particleSphere.setColorCycleSpeed(values.colorCycleSpeed);
 
     effectSystem.update(values, effectState, elapsedTime);
+    patternManager.update(deltaTime);
 
     const avgFPS = fpsMonitor.update();
     fpsMonitor.render(avgFPS);
