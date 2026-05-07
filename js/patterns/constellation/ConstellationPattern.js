@@ -421,12 +421,13 @@ export class ConstellationPattern {
 
   constructor(scene) {
     this.scene = scene;
-    this.visible = true;
+    this.visible = false;
 
     // Z軸に23°傾けたグループ（地軸の傾きを再現）
     this.group = new THREE.Group();
     this.group.rotation.z = 23 * Math.PI / 180;
     this.group.renderOrder = 1;
+    this.group.visible = this.visible;
     scene.add(this.group);
 
     this._buildStars();

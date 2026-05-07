@@ -229,6 +229,7 @@ export class KeyboardHandler {
     }
 
     // ===== エフェクト強度: グリッチ =====
+    /** グリッジ強 */
     if (this.keyState['m']) {
       const newGlitch = Math.min(
         this.paramStore.glitchStrength.target + 0.02 * deltaTime,
@@ -236,6 +237,7 @@ export class KeyboardHandler {
       );
       this.paramStore.glitchStrength.setTarget(newGlitch);
     }
+    /** グリッジ弱 */
     if (this.keyState[',']) {
       const newGlitch = Math.max(
         this.paramStore.glitchStrength.target - 0.02 * deltaTime,

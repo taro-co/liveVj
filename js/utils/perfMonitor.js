@@ -60,7 +60,7 @@ export class MemoryMonitor {
     if (performance.memory) {
       const usedMB = Math.round(performance.memory.usedJSHeapSize / 1048576);
       const limitMB = Math.round(performance.memory.jsHeapSizeLimit / 1048576);
-      console.log(`Memory: ${usedMB}MB / ${limitMB}MB (limit: 3072MB)`);
+      //console.log(`Memory: ${usedMB}MB / ${limitMB}MB (limit: 3072MB)`); //ログ
       if (usedMB > 3072) console.warn('⚠️ Memory usage exceeds 3GB limit!');
     } else {
       console.log('Memory API not available (use Chrome)');

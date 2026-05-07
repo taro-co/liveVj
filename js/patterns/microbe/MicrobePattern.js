@@ -12,7 +12,8 @@ export class MicrobePattern {
     this.group.renderOrder = 5;
     scene.add(this.group);
 
-    this.enabled = true;
+    this.enabled = false;
+    this.group.visible = this.enabled;
     this.species = {
       mikazukimo: new Mikazukimo(),
       temarimusu: new Temarimusu(),

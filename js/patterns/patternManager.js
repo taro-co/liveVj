@@ -34,6 +34,20 @@ export class PatternManager {
       if (code === 'F3' && !shift) this.patterns.microbe.toggleSpecies('rappamushi');
       if (code === 'F4' && !shift) this.patterns.microbe.toggleSpecies('tsuriganemusu');
       if (code === 'F5' && !shift) this.patterns.microbe.toggleSpecies('cyanobacteria');
+
+      // PhotoFog pattern controls (only when active)
+      if (this.patterns.photoFog.visible) {
+        if (key === 'o') {
+          const decrement = shift ? 0.05 : 0.01;
+          const newInterval = this.patterns.photoFog.SWITCH_INTERVAL - decrement;
+          this.patterns.photoFog.setSwitchInterval(newInterval);
+        }
+        if (key === 'l') {
+          const increment = shift ? 0.05 : 0.01;
+          const newInterval = this.patterns.photoFog.SWITCH_INTERVAL + increment;
+          this.patterns.photoFog.setSwitchInterval(newInterval);
+        }
+      }
     });
   }
 

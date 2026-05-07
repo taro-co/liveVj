@@ -197,6 +197,10 @@ export class PhotoFogPattern {
     this._fogMesh.material.uniforms.uTime.value += dt;
   }
 
+  setSwitchInterval(interval) {
+    this.SWITCH_INTERVAL = Math.max(0.01, Math.min(2.0, interval));
+  }
+
   dispose() {
     this._textures.forEach((t) => {
       if (t) t.dispose();

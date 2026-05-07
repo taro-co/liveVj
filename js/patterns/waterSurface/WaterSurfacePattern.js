@@ -3,11 +3,21 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 export class WaterSurfacePattern {
   constructor(scene) {
     this.scene = scene;
+    this.visible = false;
     this.uniforms = {
       uTime:    { value: 0.0 },
       uOpacity: { value: 1.0 },
     };
 
+    this.group = new THREE.Group();
+    this.group.renderOrder = 10;
+    this.group.visible = false;
+    scene.add(this.group);
+
+    this._buildMesh();
+  }
+
+  _buildMesh() {
     // 全画面を覆う平面（NDC空間で全画面）
     const geometry = new THREE.PlaneGeometry(2, 2);
 
@@ -108,19 +118,7 @@ export class WaterSurfacePattern {
     this.mesh = new THREE.Mesh(geometry, material);
     this.mesh.renderOrder = -5;
 
-    // カメラに追従させるグループ（常に画面全体を覆う）
-    this.group = new THREE.Group();
     this.group.add(this.mesh);
-    scene.add(this.group);
-
-    this.visible = true;
-  }
-
-  // カメラに追従させる場合（オプション）
-  attachToCamera(camera) {
-    camera.add(this.mesh);
-    this.mesh.position.set(0, 0, -1);
-    this.group.remove(this.mesh);
   }
 
   toggle() {
@@ -129,6 +127,7 @@ export class WaterSurfacePattern {
   }
 
   update(dt) {
+    if (!this.visible) return;
     this.uniforms.uTime.value += dt * 0.6;
   }
 
