@@ -6,12 +6,15 @@ export class Cyanobacteria {
     this.group.visible = true;
     this.group.name = 'Cyanobacteria';
     this.time = 0;
-    this._build();
+    this.maxCount = 30;
+    this.totalSpawned = 0;
+    this.filamentPool = [];
+    this._buildMaterials();
+    this._initializePool();
   }
 
-  _build() {
-    this.filaments = [];
-    const tubeMaterial = new THREE.ShaderMaterial({
+  _buildMaterials() {
+    this.tubeMaterial = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -42,7 +45,7 @@ export class Cyanobacteria {
       `,
     });
 
-    const heterocystMaterial = new THREE.MeshBasicMaterial({
+    this.heterocystMaterial = new THREE.MeshBasicMaterial({
       color: 0x88eeff,
       transparent: true,
       opacity: 0.65,
@@ -50,14 +53,15 @@ export class Cyanobacteria {
       depthWrite: false,
       side: THREE.DoubleSide,
     });
+  }
 
-    const count = 9;
-    for (let i = 0; i < count; i++) {
+  _initializePool() {
+    // 30個のプール済みインスタンスを事前生成
+    for (let i = 0; i < this.maxCount; i++) {
       const path = this._createFilamentCurve(i);
       const tubeGeo = new THREE.TubeGeometry(path, 64, 0.004, 6, false);
-      const tube = new THREE.Mesh(tubeGeo, tubeMaterial);
-      tube.position.set(-1.9 + (i % 3) * 1.2, 0.9 - Math.floor(i / 3) * 0.9, -1.5);
-      tube.rotation.y = (i % 2) * 0.15;
+      const tube = new THREE.Mesh(tubeGeo, this.tubeMaterial);
+      
       const group = new THREE.Group();
       group.add(tube);
 
@@ -66,13 +70,40 @@ export class Cyanobacteria {
       for (let j = 0; j < heteroCount; j++) {
         const t = j / (heteroCount - 1);
         const pos = path.getPoint(t);
-        const cell = new THREE.Mesh(new THREE.SphereGeometry(0.007, 8, 8), heterocystMaterial);
+        const cell = new THREE.Mesh(new THREE.SphereGeometry(0.007, 8, 8), this.heterocystMaterial);
         cell.position.copy(pos);
         heterocysts.add(cell);
       }
       group.add(heterocysts);
+      
+      // 初期状態では見えないようにする
+      group.visible = false;
       this.group.add(group);
-      this.filaments.push({ group, path, tube, tubeGeo });
+      
+      this.filamentPool.push({ group, path, tube, tubeGeo });
+    }
+  }
+
+  clear() {
+    for (let i = 0; i < this.filamentPool.length; i++) {
+      this.filamentPool[i].group.visible = false;
+    }
+    this.totalSpawned = 0;
+  }
+
+  addInstances(num = 2) {
+    for (let k = 0; k < num; k++) {
+      const poolIndex = this.totalSpawned % this.maxCount;
+      const filament = this.filamentPool[poolIndex];
+      
+      const randX = (Math.random() - 0.5) * 2.0;
+      const randY = (Math.random() - 0.5) * 1.5;
+      const randZ = -1.5 + (Math.random() - 0.5) * 1.0;
+      filament.group.position.set(randX, randY, randZ);
+      filament.group.rotation.y = (this.totalSpawned % 2) * 0.15 + (Math.random() - 0.5) * 0.2;
+      
+      filament.group.visible = true;
+      this.totalSpawned++;
     }
   }
 
@@ -99,15 +130,16 @@ export class Cyanobacteria {
 
   update(deltaTime) {
     this.time += deltaTime;
-    this.filaments.forEach((item, idx) => {
-      item.group.rotation.z = Math.sin(this.time * 0.18 + idx * 0.45) * 0.08;
-      // no per-vertex update required for static tube geometry
-    });
-    this.group.children.forEach((child) => {
-      if (child.material && child.material.uniforms) {
-        child.material.uniforms.uTime.value = this.time;
-      }
-    });
+    this.group.rotation.y += deltaTime * 0.02;
+    // 表示されているインスタンスのみ更新
+    const visibleCount = Math.min(this.totalSpawned, this.maxCount);
+    for (let i = 0; i < visibleCount; i++) {
+      const item = this.filamentPool[i];
+      item.group.rotation.z = Math.sin(this.time * 0.18 + i * 0.45) * 0.08;
+    }
+    if (this.tubeMaterial && this.tubeMaterial.uniforms) {
+      this.tubeMaterial.uniforms.uTime.value = this.time;
+    }
   }
 
   dispose() {

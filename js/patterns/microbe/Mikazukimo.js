@@ -9,13 +9,16 @@ export class Mikazukimo {
     this.group.visible = true;
     this.group.name = 'Mikazukimo';
     this.time = 0;
-    this._build();
+    this.maxCount = 30;
+    this.totalSpawned = 0;
+    this._buildMaterials();
   }
 
-  _build() {
-    const curve = this._createCrescentCurve();
-    const outerGeometry = new THREE.TubeGeometry(curve, 64, 0.035, 8, false);
-    const innerGeometry = new THREE.TubeGeometry(curve, 64, 0.012, 6, false);
+  _buildMaterials() {
+    const outerCurve = this._createCrescentCurve(1.0);
+    const innerCurve = this._createCrescentCurve(0.75); // 内側を少し短くする
+    const outerGeometry = new THREE.TubeGeometry(outerCurve, 64, 0.035, 8, false);
+    const innerGeometry = new THREE.TubeGeometry(innerCurve, 64, 0.015, 6, false); // 太さも微調整可能
 
     const outerMaterial = new THREE.MeshBasicMaterial({
       color: OUTER_COLOR,
@@ -40,7 +43,8 @@ export class Mikazukimo {
         varying vec2 vUv;
         void main() {
           vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
@@ -56,35 +60,55 @@ export class Mikazukimo {
       `,
     });
 
-    const count = 16;
-    this.outerMesh = new THREE.InstancedMesh(outerGeometry, outerMaterial, count);
-    this.innerMesh = new THREE.InstancedMesh(innerGeometry, innerMaterial, count);
-    const dummy = new THREE.Object3D();
-
-    for (let i = 0; i < count; i++) {
-      const scale = 0.75 + Math.sin(i * 0.4) * 0.18;
-      dummy.position.set(Math.cos(i * 0.35) * 1.3, Math.sin(i * 0.35) * 1.0, -1.6 - Math.sin(i * 0.6) * 0.25);
-      dummy.rotation.set(0, i * 0.25, Math.PI * 0.12);
-      dummy.scale.setScalar(scale);
-      dummy.updateMatrix();
-      this.outerMesh.setMatrixAt(i, dummy.matrix);
-      const innerScale = scale * 0.65;
-      dummy.scale.setScalar(innerScale);
-      dummy.updateMatrix();
-      this.innerMesh.setMatrixAt(i, dummy.matrix);
-    }
-
-    this.outerMesh.instanceMatrix.needsUpdate = true;
-    this.innerMesh.instanceMatrix.needsUpdate = true;
+    this.outerMesh = new THREE.InstancedMesh(outerGeometry, outerMaterial, this.maxCount);
+    this.innerMesh = new THREE.InstancedMesh(innerGeometry, innerMaterial, this.maxCount);
+    this.outerMesh.count = 0;
+    this.innerMesh.count = 0;
 
     this.group.add(this.outerMesh, this.innerMesh);
   }
 
-  _createCrescentCurve() {
+  clear() {
+    this.totalSpawned = 0;
+    this.outerMesh.count = 0;
+    this.innerMesh.count = 0;
+  }
+
+  addInstances(num = 2) {
+    const dummy = new THREE.Object3D();
+    for (let k = 0; k < num; k++) {
+      const poolIndex = this.totalSpawned % this.maxCount;
+      const scale = 0.75 + Math.sin(this.totalSpawned * 0.4) * 0.18;
+      
+      const randX = 2.0 + Math.random() * 2.0;
+      const randY = (Math.random() - 0.5) * 3.0;
+      const randZ = -2.0 + (Math.random() - 0.5) * 2.0;
+      dummy.position.set(randX, randY, randZ);
+      
+      dummy.rotation.set(0, this.totalSpawned * 0.25, Math.PI * 0.12 + Math.random() * 0.2);
+      dummy.scale.setScalar(scale);
+      dummy.updateMatrix();
+      
+      this.outerMesh.setMatrixAt(poolIndex, dummy.matrix);
+      this.innerMesh.setMatrixAt(poolIndex, dummy.matrix);
+      
+      this.totalSpawned++;
+    }
+
+    this.outerMesh.count = Math.min(this.totalSpawned, this.maxCount);
+    this.innerMesh.count = Math.min(this.totalSpawned, this.maxCount);
+    this.outerMesh.instanceMatrix.needsUpdate = true;
+    this.innerMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  _createCrescentCurve(spanRatio = 1.0) {
     const points = [];
     for (let i = 0; i < 7; i++) {
       const t = i / 6;
-      const angle = t * Math.PI * 0.9 - Math.PI * 0.45;
+      // spanRatioを掛けて、内側の時はカーブの角度を狭く（短く）する
+      const maxAngle = Math.PI * 0.45 * spanRatio;
+      const angle = (t * 2.0 - 1.0) * maxAngle;
+      
       const radius = 0.55 + 0.12 * Math.sin(t * Math.PI);
       points.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius * 0.6, 0));
     }
@@ -101,7 +125,6 @@ export class Mikazukimo {
 
   update(deltaTime) {
     this.time += deltaTime;
-    this.group.rotation.y += deltaTime * 0.03;
     this.innerMesh.material.uniforms.uTime.value = this.time;
   }
 

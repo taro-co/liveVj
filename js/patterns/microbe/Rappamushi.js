@@ -10,12 +10,15 @@ export class Rappamushi {
     this.group.visible = true;
     this.group.name = 'Rappamushi';
     this.time = 0;
-    this._build();
+    this.maxCount = 30;
+    this.totalSpawned = 0;
+    this.instancePool = [];
+    this._buildMaterials();
+    this._initializePool();
   }
 
-  _build() {
-    this.instances = [];
-    const bodyMaterial = new THREE.ShaderMaterial({
+  _buildMaterials() {
+    this.bodyMaterial = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
       blending: THREE.NormalBlending,
@@ -49,15 +52,43 @@ export class Rappamushi {
       `,
     });
 
-    const hairMaterial = new THREE.LineBasicMaterial({
-      color: HAIR_COLOR,
+    this.hairMaterial = new THREE.ShaderMaterial({
       transparent: true,
-      opacity: 0.48,
-      blending: THREE.NormalBlending,
       depthWrite: false,
+      blending: THREE.NormalBlending,
+      wireframe: false,
+      uniforms: {
+        uTime: { value: 0.0 },
+        uColor: { value: HAIR_COLOR },
+        uOpacity: { value: 0.48 },
+      },
+      vertexShader: `
+        attribute float aIsTip;
+        varying float vIsTip;
+        uniform float uTime;
+        void main() {
+          vIsTip = aIsTip;
+          vec3 pos = position;
+          // 先端のみを揺らぐようにシェーダーで処理
+          if (aIsTip > 0.5) {
+            float offset = sin(uTime * 3.0 + position.x * 10.0 + position.y * 10.0) * 0.012;
+            vec3 dir = normalize(position);
+            pos += dir * offset;
+          }
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        varying float vIsTip;
+        void main() {
+          gl_FragColor = vec4(uColor, uOpacity);
+        }
+      `,
     });
 
-    const nucleusMaterial = new THREE.MeshBasicMaterial({
+    this.nucleusMaterial = new THREE.MeshBasicMaterial({
       color: NUCLEUS_COLOR,
       transparent: true,
       opacity: 0.7,
@@ -75,11 +106,14 @@ export class Rappamushi {
       new THREE.Vector2(0.18, 0.2),
       new THREE.Vector2(0.28, 0.32),
     ];
-    const bellGeo = new THREE.LatheGeometry(profile, 64);
+    this.bellGeo = new THREE.LatheGeometry(profile, 64);
+  }
 
-    for (let i = 0; i < 5; i++) {
+  _initializePool() {
+    // 30個のプール済みインスタンスを事前生成
+    for (let i = 0; i < this.maxCount; i++) {
       const model = new THREE.Group();
-      const bell = new THREE.Mesh(bellGeo, bodyMaterial);
+      const bell = new THREE.Mesh(this.bellGeo, this.bodyMaterial);
       bell.rotation.z = Math.PI * 0.5;
       bell.position.set(0, 0.15, 0);
       bell.scale.setScalar(0.85 + (i % 2) * 0.12);
@@ -87,7 +121,9 @@ export class Rappamushi {
 
       const rimCount = 48;
       const rimPositions = new Float32Array(rimCount * 2 * 3);
+      const rimIsTip = new Float32Array(rimCount * 2);
       const rimRadius = 0.28 * bell.scale.x;
+      
       for (let j = 0; j < rimCount; j++) {
         const theta = (j / rimCount) * Math.PI * 2;
         const x = Math.cos(theta) * rimRadius;
@@ -99,19 +135,50 @@ export class Rappamushi {
         rimPositions[j * 6 + 3] = x * 1.08;
         rimPositions[j * 6 + 4] = y + 0.05;
         rimPositions[j * 6 + 5] = z * 1.08;
+        rimIsTip[j * 2 + 0] = 0.0; // 根元
+        rimIsTip[j * 2 + 1] = 1.0; // 先端
       }
+      
       const rimGeo = new THREE.BufferGeometry();
       rimGeo.setAttribute('position', new THREE.BufferAttribute(rimPositions, 3));
-      const rimLines = new THREE.LineSegments(rimGeo, hairMaterial);
+      rimGeo.setAttribute('aIsTip', new THREE.BufferAttribute(rimIsTip, 1));
+      const rimLines = new THREE.LineSegments(rimGeo, this.hairMaterial);
       model.add(rimLines);
 
-      const nucleus = new THREE.Mesh(new THREE.SphereGeometry(0.03, 16, 16), nucleusMaterial);
+      const nucleus = new THREE.Mesh(new THREE.SphereGeometry(0.03, 16, 16), this.nucleusMaterial);
       nucleus.position.set(0, 0.0, 0.05);
       model.add(nucleus);
 
-      model.position.set(-1.4 + i * 0.7, 0.8 + (i % 2) * -0.18, -1.1);
+      // 初期状態では見えないようにする
+      model.visible = false;
       this.group.add(model);
-      this.instances.push({ model, rimGeo, rimLines, rimPositions });
+      this.instancePool.push({ model, rimGeo, rimLines, rimPositions });
+    }
+  }
+
+  clear() {
+    for (let i = 0; i < this.instancePool.length; i++) {
+      this.instancePool[i].model.visible = false;
+    }
+    this.totalSpawned = 0;
+  }
+
+  addInstances(num = 2) {
+    for (let k = 0; k < num; k++) {
+      const poolIndex = this.totalSpawned % this.maxCount;
+      const instance = this.instancePool[poolIndex];
+      
+      const angle = (this.totalSpawned * Math.PI * 2) / 10 + Math.random() * 0.5;
+      const radius = 3.5 + (Math.random() - 0.5) * 0.5;
+      
+      const xPos = Math.cos(angle) * radius;
+      const yPos = Math.sin(angle) * radius;
+      const zPos = -8.0 + this.totalSpawned * 0.6;
+      
+      instance.model.position.set(xPos, yPos, zPos);
+      instance.model.visible = true;
+      
+      this.totalSpawned++;
     }
   }
 
@@ -125,23 +192,11 @@ export class Rappamushi {
 
   update(deltaTime) {
     this.time += deltaTime;
-    this.group.rotation.y += deltaTime * 0.015;
-    this.instances.forEach((instance, idx) => {
-      const positions = instance.rimPositions;
-      const count = positions.length / 6;
-      for (let j = 0; j < count; j++) {
-        const baseX = positions[j * 6 + 0];
-        const baseY = positions[j * 6 + 1];
-        const baseZ = positions[j * 6 + 2];
-        const offset = Math.sin(this.time * 3.0 + j * 0.35 + idx) * 0.012;
-        const dir = new THREE.Vector3(baseX, baseY, baseZ).normalize();
-        const tip = new THREE.Vector3(baseX, baseY, baseZ).addScaledVector(dir, 0.08 + offset);
-        positions[j * 6 + 3] = tip.x;
-        positions[j * 6 + 4] = tip.y;
-        positions[j * 6 + 5] = tip.z;
-      }
-      instance.rimGeo.attributes.position.needsUpdate = true;
-    });
+    this.group.rotation.z += deltaTime * 0.015;
+    // ShaderMaterialの uTime を更新するだけ
+    if (this.hairMaterial && this.hairMaterial.uniforms) {
+      this.hairMaterial.uniforms.uTime.value = this.time;
+    }
   }
 
   dispose() {

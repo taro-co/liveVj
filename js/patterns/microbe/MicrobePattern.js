@@ -1,8 +1,8 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 import { Mikazukimo } from './Mikazukimo.js';
-import { Temarimusu } from './Temarimusu.js';
+import { Temarimushi } from './Temarimushi.js';
 import { Rappamushi } from './Rappamushi.js';
-import { Tsuriganemusu } from './Tsuriganemusu.js';
+import { Tsuriganemushi } from './Tsuriganemushi.js';
 import { Cyanobacteria } from './Cyanobacteria.js';
 
 export class MicrobePattern {
@@ -14,27 +14,47 @@ export class MicrobePattern {
 
     this.enabled = false;
     this.group.visible = this.enabled;
+    this.speciesOrder = ['cyanobacteria', 'temarimushi', 'mikazukimo', 'rappamushi', 'tsuriganemushi'];
     this.species = {
-      mikazukimo: new Mikazukimo(),
-      temarimusu: new Temarimusu(),
-      rappamushi: new Rappamushi(),
-      tsuriganemusu: new Tsuriganemusu(),
       cyanobacteria: new Cyanobacteria(),
+      mikazukimo: new Mikazukimo(),
+      rappamushi: new Rappamushi(),
+      temarimushi: new Temarimushi(),
+      tsuriganemushi: new Tsuriganemushi(),
     };
 
     Object.values(this.species).forEach((item) => {
       this.group.add(item.group);
     });
+
+    this.sequenceTime = 0;
+    this.lastSpawnTime = -999;
   }
 
   toggle() {
     this.enabled = !this.enabled;
     this.group.visible = this.enabled;
+    if (this.enabled) {
+      this.sequenceTime = 0;
+      this.lastSpawnTime = -999;
+      this.clearAll();
+    }
   }
 
   setVisible(bool) {
     this.enabled = bool;
     this.group.visible = bool;
+    if (this.enabled) {
+      this.sequenceTime = 0;
+      this.lastSpawnTime = -999;
+      this.clearAll();
+    }
+  }
+
+  clearAll() {
+    Object.values(this.species).forEach((item) => {
+      if (typeof item.clear === 'function') item.clear();
+    });
   }
 
   toggleSpecies(name) {
@@ -49,6 +69,23 @@ export class MicrobePattern {
 
   update(deltaTime) {
     if (!this.enabled) return;
+
+    this.sequenceTime += deltaTime;
+    
+    const phaseIndex = Math.floor(this.sequenceTime / 10);
+    const speciesName = this.speciesOrder[phaseIndex % this.speciesOrder.length];
+    
+    const timeInPhase = this.sequenceTime % 10;
+    const currentSpawnStep = Math.floor(timeInPhase / 2);
+    const totalSpawnStep = phaseIndex * 5 + currentSpawnStep;
+    
+    if (totalSpawnStep > this.lastSpawnTime) {
+      if (typeof this.species[speciesName].addInstances === 'function') {
+        this.species[speciesName].addInstances(2);
+      }
+      this.lastSpawnTime = totalSpawnStep;
+    }
+
     Object.values(this.species).forEach((item) => {
       if (typeof item.update === 'function') {
         item.update(deltaTime);
