@@ -1,14 +1,144 @@
-# LiveVJ — ライブVJ用パーティクルシステム
+# LiveVJ
 
-Three.js による 10 万〜50 万粒子の発光球体と、キーボード制御・ポストエフェクト・レイヤー・プリセットを備えた VJ 用アプリケーション。
+## プロダクト概要
 
-## 必要環境
+### 概要
+- `Three.js` によるキーボード制御・ポストエフェクト・レイヤー・プリセットを備えたVJ用アプリケーション。
 
-- **ブラウザ**: Chrome 最新版（WebGL2 想定）
+**補足**
+- **VJとは** :  VJ（Visual Jockey）。音楽に合わせてリアルタイムで映像を操作し、ライブ会場やステージを視覚的に盛り上げる演出担当者のこと。
+
+### 制作背景（理由）
+- メモリが8GBのノートPC１台で音楽ソフト（DTM）と並行して起動させ続けるため、既存のVJアプリの場合、再生または描画時の遅延や音抜け最悪の場合には読み込みに時間がかかりソフトが落ちる可能性があったため。
+- 自作した場合は、使用CPUなどの制限だけでなく、自分好みの映像を制作できるため、既存ツールではなく自作することにした。
+
+## 技術スタック
+- **Three.js**: r160 (CDN)
+- **WebGL**: 2.0
+- **JavaScript**: Vanilla JS（フレームワークなし）
+
+## 設計
+
+### プロジェクト構成
+```bash
+liveVj/
+├── index.html
+├── presets.json          # プリセット定義
+├── assets/               # 画像等のアセット
+│   └── images/
+├── js/
+│   ├── main.js           # エントリ・メインループ
+│   ├── config/           # パラメータ設定
+│   │   └── params.js
+│   ├── core/             # レンダラ・リサイズ
+│   │   ├── renderer.js
+│   │   └── resize.js
+│   ├── effects/          # ポストエフェクト
+│   │   ├── effectSystem.js
+│   │   ├── glitchShader.js
+│   │   ├── trailShader.js
+│   │   ├── warpShader.js
+│   │   └── aberrationShader.js
+│   ├── gl/               # WebGL ユーティリティ
+│   │   ├── shaderLoader.js
+│   │   └── uniforms.js
+│   ├── input/            # キーボード制御
+│   │   └── keyboardHandler.js
+│   ├── layers/           # レイヤー管理
+│   │   ├── layer.js
+│   │   └── layerManager.js
+│   ├── patterns/         # VJ パターン
+│   │   ├── patternManager.js
+│   │   ├── constellation/ # 星座パターン
+│   │   │   └── ConstellationPattern.js
+│   │   ├── microbe/      # 微生物パターン
+│   │   │   ├── MicrobePattern.js
+│   │   │   ├── Cyanobacteria.js
+│   │   │   ├── Mikazukimo.js
+│   │   │   ├── Rappamushi.js
+│   │   │   ├── Temarimushi.js
+│   │   │   └── Tsuriganemushi.js
+│   │   ├── photoFog/.    # 写真ハード切り替え
+│   │   │   └── PhotoFogPattern.js
+│   │   └── waterSurface/
+│   │       └── WaterSurfacePattern.js
+│   ├── presets/          # プリセット読み込み・保存
+│   │   └── presetLoader.js
+│   ├── scenes/           # シーン管理
+│   │   └── particleSphere.js
+│   ├── state/            # 状態管理
+│   │   └── paramStore.js
+│   ├── ui/               # デバッグ UI
+│   │   └── debugUI.js
+│   └── utils/            # ユーティリティ
+│       ├── colorCycle.js
+│       └── perfMonitor.js
+└── shaders/              # GLSL シェーダー
+    ├── color.glsl
+    ├── common.glsl
+    ├── fields.glsl
+    ├── fragment.glsl
+    ├── particle.frag
+    ├── particle.vert
+    ├── particles.glsl
+    └── vertex.glsl
+```
+
+### 設計へのこだわり
+
+#### 音楽面からの要件
+アンビエントの楽曲構成は、音数が最小でかつ静かに始まり、徐々に音の種類が増えて盛り上がり、また静かになって終わるような山なりな構成であることが多い。そのため、例えば粒子の数やブルームの増減、揺らぎなどの表現を動的に行うことのできるデザインが必要であった。
+またキーボード操作については、MIDIコントローラーを使うことも考えられたが、何らかのバグや誤操作によりVJ中にDTMへ値が誤送信されかねないため、キーボード操作での実装を要件に加えた。
+
+#### VJ面からの要件
+PCメモリの制限の他に、VJ中の少しのタイムラグも許されないため、描画処理の軽量化を意識して、負荷の高いパターンは玉突き方式で切り替え制御をするなどの設計を採用した。
+
+## AI Agentとの協働プロセス
+
+### 自分が関わった箇所
+- 自身の音楽性とマッチするデザイン(何を出力するか、色かたちなど)の考案
+例）生物の生まれる瞬間の想像 -> 深海の浮遊微生物のように透明感のある身近な微生物を時間差で増殖させる など
+- 演奏・VJ中の負荷の監視
+- 実装後の検証
+
+### AI Agentが関わった/任せた箇所
+使用したAI Agent: VS Code Agent, Gemini CLI(Antigravity)
+- 上記設計や要件が満たせる詳細設計、検証後バグ修正方法の壁打ち
+- その実装
+
+### 得られた知見
+**AIの活用により開発効率が向上した部分:**
+- 設計、要件を整理した後から実装・検証までの開発スピード感
+- 限られた時間内で実装や詳細設計を任せることで、設計や検証に時間を使える点
+- 実装前にAIに実装内容を300文字以内で要約させることで、自身のプロンプトとの齟齬を減らせた点
+
+**出力結果からの品質の担保 / レビュー方法など:**
+- これまでの業務で携わった既存コードの効率化・高速化の経験を活かし、検証時に描画処理で高負荷となる操作パターンを洗い出して修正に繋げたこと
+- AIに修正案をいくつか提案させて、その内容を組み合わせてより効率的な処理になるように修正依頼したこと
+
+## 機能一覧
+以下実装中の主要機能
+
+### 出力パターン
+- Constellation パターン (球体の星座)
+- PhotoFog パターン (写真のハードカット)
+- Microbe パターン (時差出力する微生物)
+- Water Surface パターン (水面)
+
+### エフェクトパターン
+- ブルーム
+- トレイル
+- ワープ
+- グリッチ
+- 色収差
+
+## 起動方法
+
+### 必要環境
+- **ブラウザ**: Chrome 最新版
 - **実行**: ローカルサーバ必須（`file://` では ES modules のため動作しない）
 
-## インストール・起動
-
+### インストール・起動
 ```bash
 # root
 cd liveVj
@@ -105,115 +235,12 @@ python3 -m http.server 8000
 | 0 | 全リセット（初期状態に戻る）|
 | P | デバッグUI 表示切替 |
 
-### 初期パラメータ
-
-初期値：
-
-```
-粒子数: 100,000
-色相: 0.0（赤）
-彩度: 0.0（白）
-明度: 0.9（明るい）
-回転速度X: 0.001
-回転速度Y: 0.002
-ノイズ強度: 0.2
-色変化速度: 1.0倍
-
-ブルーム強度: 0.8
-トレイル強度: 0.0
-ワープ強度: 0.0
-グリッチ強度: 0.0
-色収差強度: 0.0
-
-エフェクトセットA: OFF
-エフェクトセットB: OFF
-
-Milky Way パターン: ON
-Rain パターン: ON
-Microbe パターン: ON
-Water Surface パターン: ON
-```
-
 ### プリセット作成ガイド
 
 1. キーボードで好みの状態を作る。
 2. **Cmd+1**（または 2, 3）で現在の状態をスロットに保存。
 3. 別シーンでは **Shift+1**（または 2, 3）でそのスロットを呼び出し。
 4. ファイルベースのプリセットは `presets.json` を編集してください。
-
-
-## プロジェクト構成
-
-```
-liveVj/
-├── index.html
-├── presets.json          # プリセット定義
-├── assets/               # 画像等のアセット
-│   └── images/
-├── js/
-│   ├── main.js           # エントリ・メインループ
-│   ├── config/           # パラメータ設定
-│   │   └── params.js
-│   ├── core/             # レンダラ・リサイズ
-│   │   ├── renderer.js
-│   │   └── resize.js
-│   ├── effects/          # ポストエフェクト
-│   │   ├── effectSystem.js
-│   │   ├── glitchShader.js
-│   │   ├── trailShader.js
-│   │   ├── warpShader.js
-│   │   └── aberrationShader.js
-│   ├── gl/               # WebGL ユーティリティ
-│   │   ├── shaderLoader.js
-│   │   └── uniforms.js
-│   ├── input/            # キーボード制御
-│   │   └── keyboardHandler.js
-│   ├── layers/           # レイヤー管理
-│   │   ├── layer.js
-│   │   └── layerManager.js
-│   ├── patterns/         # VJ パターン
-│   │   ├── patternManager.js
-│   │   ├── constellation/
-│   │   │   └── ConstellationPattern.js
-│   │   ├── microbe/      # 微生物パターン
-│   │   │   ├── MicrobePattern.js
-│   │   │   ├── Cyanobacteria.js
-│   │   │   ├── Mikazukimo.js
-│   │   │   ├── Rappamushi.js
-│   │   │   ├── Temarimushi.js
-│   │   │   └── Tsuriganemushi.js
-│   │   ├── photoFog/
-│   │   │   └── PhotoFogPattern.js
-│   │   └── waterSurface/
-│   │       └── WaterSurfacePattern.js
-│   ├── presets/          # プリセット読み込み・保存
-│   │   └── presetLoader.js
-│   ├── scenes/           # シーン管理
-│   │   └── particleSphere.js
-│   ├── state/            # 状態管理
-│   │   └── paramStore.js
-│   ├── ui/               # デバッグ UI
-│   │   └── debugUI.js
-│   └── utils/            # ユーティリティ
-│       ├── colorCycle.js
-│       └── perfMonitor.js
-└── shaders/              # GLSL シェーダー
-    ├── color.glsl
-    ├── common.glsl
-    ├── fields.glsl
-    ├── fragment.glsl
-    ├── particle.frag
-    ├── particle.vert
-    ├── particles.glsl
-    └── vertex.glsl
-```
-
-## 技術仕様
-
-- **Three.js**: r160 (CDN)
-- **WebGL**: 2.0
-- **JavaScript**: Vanilla JS（フレームワークなし）
-- **目標**: 60fps 維持、メモリ 3GB 以下
 
 ## ライセンス
 
